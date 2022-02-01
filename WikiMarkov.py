@@ -112,7 +112,7 @@ def runDepthSearch (currDepth, address):
     linkArr = mixLinks(bs(webResponse.text, 'html.parser').find_all('a'))
     retArr = []
 
-    for i in range(maxLink):
+    for i in range(min(maxLink, len(linkArr))):
         retArr += runDepthSearch (currDepth+1, linkArr[i])
 
     return cleanResponse (webResponse) + retArr
