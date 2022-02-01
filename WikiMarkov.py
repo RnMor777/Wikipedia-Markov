@@ -1,6 +1,7 @@
 import sys
 import re
 import random
+import time
 import requests
 import numpy as np
 from bs4 import BeautifulSoup as bs
@@ -30,11 +31,6 @@ def cleanResponse (resp):
         for line in list(tmp.split('. ')):
             if (re.search("refer to:", line)):
                 return []
-                # # need to pick the first link
-                # # print ("Page does not exist, taking first hyperlink...")
-                # newAddress = parsed.li.a.get('href')
-                # webresp = createConnection("https://en.wikipedia.org" + newAddress)
-                # return cleanResponse(webresp)
 
             # clean up the words further
             line = line.lower()
@@ -73,8 +69,8 @@ def make_markov (words, ngram=2):
                 markovModel[currState][nextState] = 1
     for currState, transition in markovModel.items():
         total = sum(transition.values())
-        for state, count in transition.items():
-            markovModel[currState][state] = count/total
+        for _, count in transition.items():
+            transition = count/total
 
     return markovModel
 
@@ -92,29 +88,42 @@ def generateStory (markovModel, start, limit):
         n += 1
     return story
 
+def runDepthSearch (currDepth, address):
+    if (currDepth == depth):
+        return []
 
-def main ():
-    address = rootAddress + "/wiki/" + input("Enter Search Term: ")
-    webresp = createConnection (address)
-    print ("\n" + address)
-    print ("Searching...", end='')
+    if (currDepth == 0):
+        print (address)
+    else:
+        print ("\b"*12, end='')
+        print ("\r" + "  "*currDepth + "-> " + address)
+        print ("Searching...", end='\r', flush=True)
 
-    if (not webresp.ok):
+    webResponse = createConnection(rootAddress + address)
+
+    if (not webResponse.ok and currDepth==0):
         print ("\nFailed to Create Connection")
         print ("Exiting...")
         sys.exit(1)
+    elif (not webResponse.ok):
+        print ("Failed")
+        return []
 
-    textArray = cleanResponse (webresp)
-    linkArr = mixLinks(bs(webresp.text, 'html.parser').find_all('a'))
+    linkArr = mixLinks(bs(webResponse.text, 'html.parser').find_all('a'))
+    retArr = []
 
-    for _ in range(1, depth):
-        for j in range(maxLink):
-            print ("\b"*12, end='')
-            print ("\r  ->", linkArr[j])
-            print ("Searching...", end='\r', flush=True)
+    for i in range(maxLink):
+        retArr += runDepthSearch (currDepth+1, linkArr[i])
 
-            webresp = createConnection(rootAddress+linkArr[j])
-            textArray += cleanResponse (webresp)
+    return cleanResponse (webResponse) + retArr
+
+
+def main ():
+    startAddress = "/wiki/" + input("Enter Search Term: ")
+    print (rootAddress, end='')
+    startTime = time.time()
+    textArray = runDepthSearch(0, startAddress)
+    endTime = time.time()
 
     markov = make_markov(textArray)
     x = random.randint(0, len(textArray)-1)
@@ -122,6 +131,8 @@ def main ():
     print (" "*12)
     print ("Markov Generated Sentence: ")
     print ("Words:", len(markov))
+    print (f"Time Elapsed: {round(endTime-startTime, 3)} seconds")
+    print ()
     print (generateStory(markov, ' '.join(textArray[x:x+2]), 20))
 
 if __name__ == "__main__":
