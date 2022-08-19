@@ -2,13 +2,12 @@ import sys
 import re
 import random
 import time
+import argparse
 import requests
 import numpy as np
 from bs4 import BeautifulSoup as bs
 
-depth = 2
-maxLink = 12
-rootAddress = "https://en.wikipedia.org"
+rootWikipedia = "https://en.wikipedia.org"
 
 def createConnection (website):
     web = requests.get(website)
@@ -88,42 +87,48 @@ def generateStory (markovModel, start, limit):
         n += 1
     return story
 
-def runDepthSearch (currDepth, address):
-    if (currDepth == depth):
-        return []
+def depthLinks (maxDepth, maxTot, startPage):
+    links = [startPage]
+    responses = []
 
-    if (currDepth == 0):
-        print (address)
-    else:
-        print ("\b"*12, end='')
-        print ("\r" + "  "*currDepth + "-> " + address)
-        print ("Searching...", end='\r', flush=True)
+    while len(responses) < maxDepth:
+        newResponses = []
+        newLinks = []
+        for page in links:
+            conn = createConnection (rootWikipedia + page)
 
-    webResponse = createConnection(rootAddress + address)
+            print (f"Contacting {rootWikipedia + page}:")
+            if not conn.ok:
+                print (f"Failed to Connect - {conn.status_code}")
+            else:
+                print ("Success")
 
-    if (not webResponse.ok and currDepth==0):
-        print ("\nFailed to Create Connection")
+            newResponses.append(conn)
+            newLinks += mixLinks(bs(conn.text, 'html.parser').find_all('a'))[:maxTot]
+        responses.append(newResponses)
+        links = newLinks
+
+    print (responses)
+    return responses
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Create a markov chain based on text extracted from Wikipedia')
+    parser.add_argument('-t', '--term', dest='term', type=str, required=True,
+            help='The search text to start with')
+    parser.add_argument('-d', '--depth', dest='depth', type=int, required=True,
+            help='The depth of sublinks to search')
+    parser.add_argument('-m', '--max', dest='max', type=int, required=True,
+            help='The maximum number of links to scan at each level')
+
+    args = parser.parse_args()
+    startTime = time.time()
+
+    if not createConnection(rootWikipedia + '/wiki/' + args.term).ok:
+        print ("Error: Page Not Found")
         print ("Exiting...")
         sys.exit(1)
-    elif (not webResponse.ok):
-        print ("Failed")
-        return []
 
-    linkArr = mixLinks(bs(webResponse.text, 'html.parser').find_all('a'))
-    retArr = []
-
-    for i in range(min(maxLink, len(linkArr))):
-        retArr += runDepthSearch (currDepth+1, linkArr[i])
-
-    return cleanResponse (webResponse) + retArr
-
-
-def main ():
-    startAddress = "/wiki/" + input("Enter Search Term: ")
-    print (rootAddress, end='')
-    startTime = time.time()
-    textArray = runDepthSearch(0, startAddress)
-    print (textArray)
+    textArray = depthLinks (args.depth, args.max, '/wiki/' + args.term)
     endTime = time.time()
 
     markov = make_markov(textArray)
@@ -135,6 +140,3 @@ def main ():
     print (f"Time Elapsed: {round(endTime-startTime, 3)} seconds")
     print ()
     print (generateStory(markov, ' '.join(textArray[x:x+2]), 20))
-
-if __name__ == "__main__":
-    main()
